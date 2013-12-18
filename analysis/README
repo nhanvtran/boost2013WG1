@@ -4,6 +4,7 @@ Pre-requesites:
 3. Installation of fastjet/contrib
 
 Workflow:
+0. Store your data in a directory "analysis/data/"
 1. Take LHE input, read in, compute stuff, make a ROOT TTree that holds all of the information
 2. Plot the information
 
