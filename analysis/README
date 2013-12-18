@@ -1,0 +1,26 @@
+Pre-requesites:
+1. Installation of ROOT
+2. Installation of fastjet
+3. Installation of fastjet/contrib
+
+Workflow:
+1. Take LHE input, read in, compute stuff, make a ROOT TTree that holds all of the information
+2. Plot the information
+
+-------------------------
+
+To compile the code for step 1:
+c++ -o anaSubstructure `root-config --glibs --cflags` `<yourFastjetInstall>/bin/fastjet-config --cxxflags --libs --plugins` -lvectorDict -lEnergyCorrelator anaSubstructure.cpp
+
+To run the code for step 1: 
+./anaSubstructure "flavor" "ptbin" "nevents"
+
+Inputs: 
+flavor = "gg" or "qq"
+ptbin = lower edge of the generated pT bin
+nevents = number of events to run over
+
+-------------------------
+
+Example of how to  plot:
+python plotter -b --ptbin 500
