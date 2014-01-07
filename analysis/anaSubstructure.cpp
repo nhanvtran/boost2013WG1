@@ -28,6 +28,8 @@
 #include "fastjet/contrib/EnergyCorrelator.hh"
 
 #include "LHEF.h"
+#include "QjetsPlugin.h"
+#include "Qjets.h"
 
 //#ifdef __MAKECINT__
 //#pragma link C++ class vector<float>+;
@@ -58,6 +60,8 @@ using namespace fastjet::contrib;
 
 ////////////////////-----------------------------------------------
 // Global variables
+int evtCtr;
+
 int njets;
 std::vector<float> jpt;
 std::vector<float> jeta;
@@ -69,10 +73,15 @@ std::vector<float> jtau2_b2;
 std::vector<float> jc1_b0;
 std::vector<float> jc1_b1;
 std::vector<float> jc1_b2;
+std::vector<float> j_qjetVol;
 
 void analyzeEvent(std::vector < fastjet::PseudoJet > particles);
-////////////////////-----------------------------------------------
 
+float FindRMS( std::vector< float > qjetmasses );
+float FindMean( std::vector< float > qjetmasses );
+double getQjetVolatility(std::vector < fastjet::PseudoJet > constits, int QJetsN = 25, int seed = 12345);
+
+////////////////////-----------------------------------------------
 
 int main (int argc, char **argv) {
     
@@ -102,15 +111,16 @@ int main (int argc, char **argv) {
     t->Branch("jc1_b0"      , &jc1_b0      );
     t->Branch("jc1_b1"      , &jc1_b1      );
     t->Branch("jc1_b2"      , &jc1_b2      );
+    t->Branch("j_qjetVol"   , &j_qjetVol      );
 
             
-    int evtCtr = 0;
+    evtCtr = 0;
     std::vector < fastjet::PseudoJet > particles;
 
     // loop over events
     while ( reader.readEvent () ) {
         ++evtCtr;
-        if (evtCtr % 100 == 0) std::cout << "event " << evtCtr << "\n";
+        if (evtCtr % 1 == 0) std::cout << "event " << evtCtr << "\n";
         if (evtCtr > max) break;
         
         // per event
@@ -125,6 +135,7 @@ int main (int argc, char **argv) {
         jc1_b0.clear();
         jc1_b1.clear();
         jc1_b2.clear();
+        j_qjetVol.clear();
                         
         for (unsigned int i = 0 ; i < reader.hepeup.IDUP.size(); ++i){
 
@@ -190,25 +201,102 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
     // FILL IN THE TREE
     njets = out_jets.size();
     for (unsigned int i = 0; i < out_jets.size(); i++){
+    
         jpt.push_back( out_jets[i].pt() );
         jeta.push_back( out_jets[i].eta() );
         jmass.push_back( out_jets[i].m() );                
 
+        // N-subjettiness
         jtau1_b1.push_back( nSub1KT_b1(out_jets.at(i)) );        
         jtau2_b1.push_back( nSub2KT_b1(out_jets.at(i)) );        
         jtau1_b2.push_back( nSub1KT_b2(out_jets.at(i)) );        
         jtau2_b2.push_back( nSub2KT_b2(out_jets.at(i)) );  
                 
+        // energy correlator        
         jc1_b0.push_back( C2_b0(out_jets.at(i)) );            
         jc1_b1.push_back( C2_b1(out_jets.at(i)) );            
         jc1_b2.push_back( C2_b2(out_jets.at(i)) );                    
                 
-        //std::cout << " out_jets[i].pt() = " << out_jets[i].pt() << std::endl;           
+        // Qjets computation
+        int QJetsPreclustering = 999;
+        std::vector<fastjet::PseudoJet> constits;        
+        if (i == 0){ // only fill qjets for the hardest jet in the event to save time
+            unsigned int nqjetconstits = out_jets.at(i).constituents().size();
+            if (nqjetconstits < (unsigned int) QJetsPreclustering) constits = out_jets.at(i).constituents();
+            else constits = out_jets.at(i).associated_cluster_sequence()->exclusive_subjets_up_to(out_jets.at(i),QJetsPreclustering);        
+
+            j_qjetVol.push_back( getQjetVolatility(constits, 25, evtCtr*25) );            
+        }
+        else{
+            j_qjetVol.push_back( -1. );
+        }
+        constits.clear();
+                    
     }
     // ++++++++++++++++++++++++++++++++++++++++++++++++++++
     
     thisClustering->delete_self_when_unused();
     
 }
+
+// ----------------------------------------------------------------------------------
+
+// -----------------------------------------
+// other helpers
+// -----------------------------------------
+
+float FindRMS( std::vector< float > qjetmasses ){
+    
+    float total = 0.;
+    float ctr = 0.;
+    for (unsigned int i = 0; i < qjetmasses.size(); i++){
+        total = total + qjetmasses[i];
+        ctr++;
+    }
+    float mean =  total/ctr;
+    
+    float totalsquared = 0.;
+    for (unsigned int i = 0; i < qjetmasses.size(); i++){
+        totalsquared += (qjetmasses[i] - mean)*(qjetmasses[i] - mean) ;
+    }
+    float RMS = sqrt( totalsquared/ctr );
+    return RMS;
+}
+
+float FindMean( std::vector< float > qjetmasses ){
+    float total = 0.;
+    float ctr = 0.;
+    for (unsigned int i = 0; i < qjetmasses.size(); i++){
+        total = total + qjetmasses[i];
+        ctr++;
+    }
+    return total/ctr;
+}
+
+double getQjetVolatility(std::vector < fastjet::PseudoJet > constits, int QJetsN, int seed){
+    
+    std::vector< float > qjetmasses;
+    
+    double zcut(0.1), dcut_fctr(0.5), exp_min(0.), exp_max(0.), rigidity(0.1), truncationFactor(0.01);          
+    
+    for(unsigned int ii = 0 ; ii < (unsigned int) QJetsN ; ii++){
+        QjetsPlugin qjet_plugin(zcut, dcut_fctr, exp_min, exp_max, rigidity, truncationFactor);
+        qjet_plugin.SetRandSeed(seed+ii); // new feature in Qjets to set the random seed
+        fastjet::JetDefinition qjet_def(&qjet_plugin);
+        fastjet::ClusterSequence qjet_seq(constits, qjet_def);
+        vector<fastjet::PseudoJet> inclusive_jets2 = sorted_by_pt(qjet_seq.inclusive_jets(5.0));
+        
+        if (inclusive_jets2.size()>0) { qjetmasses.push_back( inclusive_jets2[0].m() ); }
+        
+    }
+    
+    // find RMS of a vector
+    float qjetsRMS = FindRMS( qjetmasses );
+    // find mean of a vector
+    float qjetsMean = FindMean( qjetmasses );
+    float qjetsVolatility = qjetsRMS/qjetsMean;
+    return qjetsVolatility;
+}
+
 
 
