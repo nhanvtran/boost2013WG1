@@ -11,10 +11,10 @@ Workflow:
 -------------------------
 
 To compile the code for step 1:
-c++ -o anaSubstructure `root-config --glibs --cflags` `<yourFastjetInstall>/bin/fastjet-config --cxxflags --libs --plugins` -lvectorDict -lEnergyCorrelator anaSubstructure.cpp
+$ make
 
 To run the code for step 1: 
-./anaSubstructure "flavor" "ptbin" "nevents"
+$ ./anaSubstructure "flavor" "ptbin" "nevents"
 
 Inputs: 
 flavor = "gg" or "qq"
