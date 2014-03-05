@@ -2,16 +2,19 @@
 import os
 import glob
 import math
-import array
+from array import array
 import sys
 import time
 
 import ROOT
 
+from TMVAhelper import *
+
 ROOT.gROOT.ProcessLine(".L ~/tdrstyle.C");
 ROOT.setTDRStyle();
 ROOT.gStyle.SetPadLeftMargin(0.16);
 ROOT.gStyle.SetPadRightMargin(0.10);
+ROOT.gStyle.SetPalette(1);
 
 
 ############################################
@@ -24,6 +27,7 @@ parser = OptionParser()
 parser.add_option('-b', action='store_true', dest='noX', default=False, help='no X11 windows')
 parser.add_option('--type',action="store",type="string",dest="type",default="gg")
 parser.add_option('--ptbin',action="store",type="int",dest="ptbin",default=500)
+parser.add_option('--train',action="store_true",dest="train",default=False,help='do training')
 
 (options, args) = parser.parse_args()
 
@@ -70,11 +74,53 @@ def makeSingleHistCanvas( h_2D ):
     cant.SaveAs(directory+"/"+h_2D.GetName()+".png");
     cant.SaveAs(directory+"/"+h_2D.GetName()+".eps");
 
+def makeROCFromHisto(hsig,hbkg,LtoR):
     
-############################################################
+    nbins = hsig.GetNbinsX();
+    binsize = hsig.GetBinWidth(1);
+    lowedge = hsig.GetBinLowEdge(1);
+    
+    #print "lowedge: ",lowedge
+    
+    hsigIntegral = hsig.Integral();
+    hbkgIntegral = hbkg.Integral();
+    
+    xval = array('d', [])
+    yval = array('d', [])
+    ctr = 0;
+    for i in range(1,nbins+1):
+        
+        effBkg = 0;
+        effSig = 0;
+        
+        if LtoR: effBkg = hbkg.Integral( i, nbins )/hbkgIntegral;
+        else: effBkg = hbkg.Integral( 1, i )/hbkgIntegral;
+        
+        if LtoR: effSig = hsig.Integral( i, nbins )/hsigIntegral;
+        else: effSig = hsig.Integral( 1, i )/hsigIntegral;
+        
+        #print "cut: ",(lowedge+(i-1)*binsize),"effBkg: ", effBkg, ", effSig: ", effSig;
+        
+        xval.append( effSig );
+        yval.append( 1-effBkg );
+        ctr = ctr + 1;
+    
+    #print nbins, "and ", ctr
+    tg = ROOT.TGraph( nbins, xval, yval );
+    tg.SetName( "tg"+hsig.GetName() );
+    return tg;      
+
+    
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
 
 if __name__ == '__main__':
 
+    ROOT.TMVA.Tools.Instance();
+    
     type = options.type;
     bin = options.ptbin;
     binp1 = options.ptbin + 100;
@@ -89,6 +135,8 @@ if __name__ == '__main__':
     files.append("data/boost2013-pythia81-tune4c-lhc8-gg-pt0"+str(bin)+"-0"+str(binp1)+".root");
     files.append("data/boost2013-pythia81-tune4c-lhc8-qq-pt0"+str(bin)+"-0"+str(binp1)+".root");    
 
+    obs_nb = 100;
+
     h_pt1 = [];
     h_pt2 = [];
     h_eta1 = [];
@@ -100,40 +148,85 @@ if __name__ == '__main__':
     h_c1_b0 = [];
     h_c1_b1 = [];
     h_c1_b2 = [];
-    
+    h_qjetVol = [];
+    h_mass_trim = [];
+    h_mass_mmdt = [];
+    h_mass_prun = [];
+    h_mass_sdb2 = [];
+        
     #observables to correlate
-    obs2Corr = ["jmass","jtau1_b1","jtau1_b2","jc1_b0","jc1_b1","jc1_b2"];
-    obs2Corr_name = ["mass","#tau_{1}^{#beta=1}","#tau_{1}^{#beta=2}","C_{1}^{#beta=0}","C_{1}^{#beta=1}","C_{1}^{#beta=2}"]
-    obs2Corr_nb = [40,40,40,40,40,40];
-    obs2Corr_lo = [0,0,0,0.2,0,0];
-    obs2Corr_hi = [200,0.5,0.5,0.5,0.3,0.3];
-            
+    obs2Corr = ["jmass","jtau1_b1","jtau1_b2","jc1_b0","jc1_b1","jc1_b2","j_qjetVol","j_mass_trim","j_mass_mmdt","j_mass_prun","j_mass_sdb2"];
+    obs2Corr_name = ["m","#tau_{1}^{#beta=1}","#tau_{1}^{#beta=2}",
+                     "C_{1}^{#beta=0}","C_{1}^{#beta=1}","C_{1}^{#beta=2}",
+                     "#Gamma_{Qjet}",
+                     "m_{trim}","m_{mmdt}","m_{prun}","m_{sd}^{#beta=2}"]
+    #obs2Corr_nb = [40,40,40,40,40,40,40,40,40,40];
+    obs2Corr_nb = [40]*11;
+    obs2Corr_lo = [  0,  0,  0,0.2,  0,  0,0,  0,  0,  0,  0];
+    obs2Corr_hi = [200,0.5,0.5,0.5,0.3,0.3,1,240,240,240,240];
+
+    h_bdts = [];            
+    h_bdts_vars = [];
     h_2D = [];
     for a in range(len(types)):
         h_2D_type = []
+        h_bdts_type = [];
         for i in range(len(obs2Corr)):
             for j in range(i+1,len(obs2Corr)):
                 hname = "h2d_"+obs2Corr[i]+"_"+obs2Corr[j]+"_"+types[a];
                 htitle = ";"+obs2Corr_name[i]+";"+obs2Corr_name[j];
                 print "hname = ",hname
                 h_2D_type.append( ROOT.TH2F(hname,htitle,obs2Corr_nb[i],obs2Corr_lo[i],obs2Corr_hi[i],obs2Corr_nb[j],obs2Corr_lo[j],obs2Corr_hi[j]) );
+                
+                # bdt stuff
+                bdttitle = ";"+obs2Corr_name[i]+"+"+obs2Corr_name[j]+"; N";
+                h_bdts_type.append( ROOT.TH1F("h_bdt_"+hname,bdttitle,obs_nb,-1,1) )
+                if a == 0: h_bdts_vars.append( [obs2Corr[i],obs2Corr[j]] );
+                    
         h_2D.append( h_2D_type );
-        
+        h_bdts.append( h_bdts_type );
         
     for i in range(len(types)):
-        h_pt1.append( ROOT.TH1F("h_pt1_"+types[i],";jet 1 pT (GeV); N",50,0,2000) );
-        h_pt2.append( ROOT.TH1F("h_pt2_"+types[i],";jet 2 pT (GeV); N",50,0,2000) );
-        h_eta1.append( ROOT.TH1F("h_eta1_"+types[i],";jet 1 eta; N",20,-5,5) );
-        h_eta2.append( ROOT.TH1F("h_eta2_"+types[i],";jet 2 eta; N",20,-5,5) );
-        h_mass1.append( ROOT.TH1F("h_mass1_"+types[i],";jet 1 mass; N",40,0,200) );
-        h_mass2.append( ROOT.TH1F("h_mass2_"+types[i],";jet 2 mass; N",40,0,200) );
+
+        h_pt1.append( ROOT.TH1F("h_jpt1_"+types[i],";jet 1 pT (GeV); N",50,0,2000) );
+        h_pt2.append( ROOT.TH1F("h_jpt2_"+types[i],";jet 2 pT (GeV); N",50,0,2000) );
+        h_eta1.append( ROOT.TH1F("h_jeta1_"+types[i],";jet 1 eta; N",20,-5,5) );
+        h_eta2.append( ROOT.TH1F("h_jeta2_"+types[i],";jet 2 eta; N",20,-5,5) );
+        h_mass1.append( ROOT.TH1F("h_jmass1_"+types[i],";jet 1 mass; N",obs_nb,0,200) );
+        h_mass2.append( ROOT.TH1F("h_jmass2_"+types[i],";jet 2 mass; N",obs_nb,0,200) );
     
-        h_tau1_b1.append( ROOT.TH1F("h_tau1_b1"+types[i],";tau1 (beta=1); N",40,0,0.5) );
-        h_tau1_b2.append( ROOT.TH1F("h_tau1_b2"+types[i],";tau1 (beta=2); N",40,0,0.5) );        
-        h_c1_b0.append( ROOT.TH1F("h_c1_b0"+types[i],";c1 (beta=0); N",40,0.2,0.5) );
-        h_c1_b1.append( ROOT.TH1F("h_c1_b1"+types[i],";c1 (beta=1); N",40,0,0.3) );        
-        h_c1_b2.append( ROOT.TH1F("h_c1_b2"+types[i],";c1 (beta=2); N",40,0,0.3) );        
+        h_tau1_b1.append( ROOT.TH1F("h_jtau1_b1"+types[i],";tau1 (beta=1); N",obs_nb,0,0.5) );
+        h_tau1_b2.append( ROOT.TH1F("h_jtau1_b2"+types[i],";tau1 (beta=2); N",obs_nb,0,0.5) );        
+        h_c1_b0.append( ROOT.TH1F("h_jc1_b0"+types[i],";c1 (beta=0); N",obs_nb,0.2,0.5) );
+        h_c1_b1.append( ROOT.TH1F("h_jc1_b1"+types[i],";c1 (beta=1); N",obs_nb,0,0.3) );        
+        h_c1_b2.append( ROOT.TH1F("h_jc1_b2"+types[i],";c1 (beta=2); N",obs_nb,0,0.3) );        
+
+        h_qjetVol.append( ROOT.TH1F("h_j_qjetVol"+types[i],";#Gamma_{Qjet}; N",obs_nb,0,1) );        
+        h_mass_trim.append( ROOT.TH1F("h_j_mass_trim"+types[i],";m_{trim}; N",obs_nb,0,240) );        
+        h_mass_mmdt.append( ROOT.TH1F("h_j_mass_mmdt"+types[i],";m_{mmdt}; N",obs_nb,0,240) );        
+        h_mass_prun.append( ROOT.TH1F("h_j_mass_prun"+types[i],";m_{prun}; N",obs_nb,0,240) );        
+        h_mass_sdb2.append( ROOT.TH1F("h_j_mass_sdb2"+types[i],";m_{sd}^{#beta=2}; N",obs_nb,0,240) );        
+                    
+    #######-----------------------------------------------
+    #######-----------------------------------------------
+    ## TMVA stuff
+    ## classifier
+    ## inputs, list of variables, list of ntuples
+    bdtClasses = [];
+    bdtctr = 0;
+    for i in range(len(obs2Corr)):
+        for j in range(i+1,len(obs2Corr)):
             
+            vars_tmp = [obs2Corr[i],obs2Corr[j]];
+            tmva_tmp = TMVAhelper("tmva_"+obs2Corr[i]+"_"+obs2Corr[j],vars_tmp,files);
+            bdtClasses.append(tmva_tmp);
+            if options.train: bdtClasses[bdtctr].train();
+            bdtClasses[bdtctr].read();            
+            bdtctr += 1;
+    
+    #######-----------------------------------------------
+    #######-----------------------------------------------
+    
     for a in range(len(types)):
     
         f = ROOT.TFile(files[a]);
@@ -141,6 +234,9 @@ if __name__ == '__main__':
     
         for i in range(t.GetEntries()):
 
+            if i % 1000 == 0: print "file #",a,", event #",i
+            if i > 10000: break;
+            
             t.GetEntry(i);
             h_pt1[a].Fill( t.jpt[0] );
             h_pt2[a].Fill( t.jpt[1] );
@@ -154,13 +250,25 @@ if __name__ == '__main__':
             
             h_c1_b0[a].Fill( t.jc1_b0[0] );                        
             h_c1_b1[a].Fill( t.jc1_b1[0] );                        
-            h_c1_b2[a].Fill( t.jc1_b2[0] );   
+            h_c1_b2[a].Fill( t.jc1_b2[0] ); 
+            
+            h_qjetVol[a].Fill( t.j_qjetVol[0] );
+            h_mass_trim[a].Fill( t.j_mass_trim[0] );
+            h_mass_mmdt[a].Fill( t.j_mass_mmdt[0] );
+            h_mass_prun[a].Fill( t.j_mass_prun[0] );
+            h_mass_sdb2[a].Fill( t.j_mass_sdb2[0] );            
             
             #2D plots
             obsctr = 0;
             for j in range(len(obs2Corr)):
                 for k in range(j+1,len(obs2Corr)):
                     h_2D[a][obsctr].Fill( getattr(t,obs2Corr[j])[0], getattr(t,obs2Corr[k])[0] );
+
+                    tmpList = [];
+                    for l in range(len(h_bdts_vars[obsctr])): 
+                        tmpList.append( getattr(t,h_bdts_vars[obsctr][l])[0] );
+                    bdtOutput = bdtClasses[obsctr].evaluate( tmpList );
+                    h_bdts[a][obsctr].Fill(bdtOutput);
                     obsctr += 1;
             
         del f;
@@ -178,8 +286,23 @@ if __name__ == '__main__':
     makeCanvas(h_tau1_b2, types, "h_tau1_b2");                    
     makeCanvas(h_c1_b0, types, "h_c1_b0");                    
     makeCanvas(h_c1_b1, types, "h_c1_b1");                    
-    makeCanvas(h_c1_b2, types, "h_c1_b2");                            
-     
+    makeCanvas(h_c1_b2, types, "h_c1_b2");
+
+    makeCanvas(h_qjetVol, types, "h_qjetVol");
+    makeCanvas(h_mass_trim, types, "h_mass_trim");
+    makeCanvas(h_mass_mmdt, types, "h_mass_mmdt");
+    makeCanvas(h_mass_prun, types, "h_mass_prun");
+    makeCanvas(h_mass_sdb2, types, "h_mass_sdb2");
+
+    #plot bdts
+    obsctr = 0;
+    for j in range(len(obs2Corr)):
+        for k in range(j+1,len(obs2Corr)):
+            tmpList = [];
+            for a in range(len(types)): tmpList.append( h_bdts[a][obsctr] );
+            makeCanvas( tmpList, types, h_bdts[0][obsctr].GetName() );        
+            obsctr += 1;
+
     for a in range(len(types)):
         #2D plots
         obsctr = 0;
@@ -188,5 +311,163 @@ if __name__ == '__main__':
                 makeSingleHistCanvas(h_2D[a][obsctr]);        
                 obsctr += 1;
             
+    # ROCs
+    roc_mass    = makeROCFromHisto( h_mass1[0], h_mass1[1], 1 );    
+    roc_mass.SetLineColor( 1 );
+    roc_tau1_b1 = makeROCFromHisto( h_tau1_b1[0], h_tau1_b1[1], 1 );
+    roc_tau1_b1.SetLineColor( 2 );
+    roc_tau1_b2 = makeROCFromHisto( h_tau1_b2[0], h_tau1_b2[1], 1 );
+    roc_tau1_b2.SetLineColor( 4 );
+    roc_c1_b0   = makeROCFromHisto( h_c1_b0[0], h_c1_b0[1], 1 );
+    roc_c1_b0.SetLineColor( 6 );
+    roc_c1_b1   = makeROCFromHisto( h_c1_b1[0], h_c1_b1[1], 1 );
+    roc_c1_b1.SetLineColor( 7 );
+    roc_c1_b2   = makeROCFromHisto( h_c1_b2[0], h_c1_b2[1], 1 );
+    roc_c1_b2.SetLineColor( 3 );
 
+    roc_qjetVol = makeROCFromHisto( h_qjetVol[0], h_qjetVol[1], 0 );
+    roc_qjetVol.SetLineColor( 3 ); roc_qjetVol.SetLineStyle( 3 ); 
+    roc_mass_trim = makeROCFromHisto( h_mass_trim[0], h_mass_trim[1], 1 );
+    roc_mass_trim.SetLineColor( 2 ); roc_mass_trim.SetLineStyle( 3 ); 
+    roc_mass_mmdt = makeROCFromHisto( h_mass_mmdt[0], h_mass_mmdt[1], 1 );
+    roc_mass_mmdt.SetLineColor( 1 ); roc_mass_mmdt.SetLineStyle( 3 ); 
+    roc_mass_prun = makeROCFromHisto( h_mass_prun[0], h_mass_prun[1], 1 );
+    roc_mass_prun.SetLineColor( 6 ); roc_mass_prun.SetLineStyle( 3 ); 
+    roc_mass_sdb2 = makeROCFromHisto( h_mass_sdb2[0], h_mass_sdb2[1], 1 );
+    roc_mass_sdb2.SetLineColor( 6 ); roc_mass_sdb2.SetLineStyle( 3 ); 
+
+    roc_mass.SetLineWidth( 2 );
+    roc_tau1_b1.SetLineWidth( 2 );
+    roc_tau1_b2.SetLineWidth( 2 );
+    roc_c1_b0.SetLineWidth( 2 );
+    roc_c1_b1.SetLineWidth( 2 );
+    roc_c1_b2.SetLineWidth( 2 );
+    roc_c1_b0.SetLineStyle( 2 );
+    roc_c1_b1.SetLineStyle( 2 );
+    roc_c1_b2.SetLineStyle( 2 );
+
+
+    #bdt styles...
+    bdtcolors = [1,2,3,4,5,6,7,8,9,12,38,46]
+    bdtstyles = [6,7,8,9,10]    
+    bdtlines = [];
+    for j in range(len(bdtstyles)):
+        for k in range(len(bdtcolors)):
+            bdtlines.append( [bdtcolors[k], bdtstyles[j]] );
+    roc_bdts = [];
+    obsctr = 0;
+    for j in range(len(obs2Corr)):
+        for k in range(j+1,len(obs2Corr)):
+            roc_bdts.append( makeROCFromHisto( h_bdts[0][obsctr], h_bdts[1][obsctr], 1 ) );
+            roc_bdts[obsctr].SetLineColor( bdtlines[obsctr][0] );
+            roc_bdts[obsctr].SetLineStyle( bdtlines[obsctr][1] );
+            obsctr += 1;
+
+    ## combine all ROCs into one array...
+    allROCs = [];
+    allROCsNames = [];
+    allROCs.append( roc_mass );
+    allROCsNames.append( "m" );
+    allROCs.append( roc_tau1_b1 );  
+    allROCsNames.append( "#tau_{1}^{#beta=1}" );
+    allROCs.append( roc_tau1_b2 );  
+    allROCsNames.append( "#tau_{1}^{#beta=2}" );
+    allROCs.append( roc_c1_b0 );  
+    allROCsNames.append( "C_{1}^{#beta=0}" );
+    allROCs.append( roc_c1_b1 );  
+    allROCsNames.append( "C_{1}^{#beta=1}" );
+    allROCs.append( roc_c1_b2 );  
+    allROCsNames.append( "C_{1}^{#beta=2}" );
+    allROCs.append( roc_qjetVol );  
+    allROCsNames.append( "#Gamma_{Qjet}" );
+    allROCs.append( roc_mass_trim );  
+    allROCsNames.append( "m_{trim}" );
+    allROCs.append( roc_mass_trim );  
+    allROCsNames.append( "m_{trim}" );
+    allROCs.append( roc_mass_mmdt );  
+    allROCsNames.append( "m_{mmdt}" );
+    allROCs.append( roc_mass_prun );  
+    allROCsNames.append( "m_{prun}" );
+    allROCs.append( roc_mass_sdb2 );  
+    allROCsNames.append( "m_{sd}^{#beta=2}" );
+    obsctr = 0;
+    for j in range(len(obs2Corr)):
+        for k in range(j+1,len(obs2Corr)):
+            allROCs.append( roc_bdts[obsctr] );  
+            allROCsNames.append( obs2Corr_name[j]+"+"+obs2Corr_name[k] );
+            obsctr += 1;
+            
+    leg = ROOT.TLegend( 0.0, 0.0, 1.0, 1.0 );
+    leg.SetBorderSize( 0 );
+    leg.SetFillStyle( 0 );
+    #leg.SetTextSize( 0.04 );    
+    leg.SetNColumns(4);
+    for i in range(len(allROCs)):
+        leg.AddEntry( allROCs[i], allROCsNames[i], "l" );
+
+    canRoc = ROOT.TCanvas("canRoc","canRoc",2500,1000);    
+    canRoc.Divide(2,1);
+    canRoc.cd(1);
+    hrl = canRoc.DrawFrame(0,0,1.0,1.0);
+    hrl.GetXaxis().SetTitle("#epsilon_{sig}");
+    hrl.GetYaxis().SetTitle("1 - #epsilon_{bkg}");    
+    for i in range(len(allROCs)):
+        allROCs[i].Draw();
+    canRoc.cd(2);
+    leg.Draw();
+    canRoc.SaveAs(directory+"/Rocs_1D.eps");
+    canRoc.SaveAs(directory+"/Rocs_1D.png");
+
+    ## ------------
+    
+    for a in range(len(obs2Corr)):
         
+        legSingle = ROOT.TLegend( 0.0, 0.0, 1.0, 1.0 );
+        legSingle.SetBorderSize( 0 );
+        legSingle.SetFillStyle( 0 );
+        leg.SetTextSize( 0.06 );    
+        legSingle.SetNColumns(4);
+        for i in range(len(allROCs)):
+            if obs2Corr[a] in allROCs[i].GetName(): legSingle.AddEntry( allROCs[i], allROCsNames[i], "l" );
+
+        canRocSingle = ROOT.TCanvas("canRocSingle","canRocSingle",2500,1000);    
+        canRocSingle.Divide(2,1);
+        canRocSingle.cd(1);
+        hrlSingle = canRocSingle.DrawFrame(0,0,1.0,1.0);
+        hrlSingle.GetXaxis().SetTitle("#epsilon_{sig}");
+        hrlSingle.GetYaxis().SetTitle("1 - #epsilon_{bkg}");    
+        for i in range(len(allROCs)):
+            if obs2Corr[a] in allROCs[i].GetName(): allROCs[i].Draw();
+        canRocSingle.cd(2);
+        legSingle.Draw();
+        canRocSingle.SaveAs(directory+"/Rocs_1D_"+obs2Corr[a]+".eps");
+        canRocSingle.SaveAs(directory+"/Rocs_1D_"+obs2Corr[a]+".png");
+
+        del legSingle
+        del hrlSingle
+        del canRocSingle
+        
+    ## ------------    
+        
+    leg1 = ROOT.TLegend( 0.0, 0.0, 1.0, 1.0 );
+    leg1.SetBorderSize( 0 );
+    leg1.SetFillStyle( 0 );
+    leg.SetTextSize( 0.06 );    
+    leg1.SetNColumns(4);
+    for i in range(len(obs2Corr)):
+        leg1.AddEntry( allROCs[i], allROCsNames[i], "l" );
+
+    canRoc1 = ROOT.TCanvas("canRoc1","canRoc1",2500,1000);    
+    canRoc1.Divide(2,1);
+    canRoc1.cd(1);
+    hrl1 = canRoc1.DrawFrame(0.01,0.01,1.0,1.0);
+    hrl1.GetXaxis().SetTitle("#epsilon_{sig}");
+    hrl1.GetYaxis().SetTitle("1 - #epsilon_{bkg}");    
+    for i in range(len(obs2Corr)):
+        allROCs[i].Draw();
+#    ROOT.gPad.SetLogx();
+#    ROOT.gPad.SetLogy();
+    canRoc1.cd(2);
+    leg1.Draw();
+    canRoc1.SaveAs(directory+"/Rocs_1D_single.eps");
+    canRoc1.SaveAs(directory+"/Rocs_1D_single.png");        
