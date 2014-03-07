@@ -1,7 +1,7 @@
 # ----------------------------------------
 # inputs 
 
-FASTJETLOCATION=/Users/ntran/Research/CMS/PhysicsAnalysis/ProjectPUPPI/V2/fastjet-install/
+FASTJETLOCATION=/Users/ntran/Documents/Research/CMS/PhysicsAnalysis/fastjet/fastjet-install/
 FASTJETINC :=`$(FASTJETLOCATION)/bin/fastjet-config --cxxflags --plugins`
 FASTJETLIB :=`$(FASTJETLOCATION)/bin/fastjet-config --libs --plugins`
 
@@ -20,7 +20,7 @@ lib/libQjets.so: $(FILES) $(FILES:.cc=.o)
 	gcc $(SOFLAGS) -o $@ $(FILES)
 
 anaSubstructure: anaSubstructure.cpp $(FILES)
-	c++ -o anaSubstructure $(ROOTINC) $(FASTJETINC) $(FASTJETLIB) -lvectorDict -lEnergyCorrelator -lQjets -lRecursiveTools -lSoftDrop -L./lib anaSubstructure.cpp
+	c++ -o anaSubstructure $(ROOTINC) $(FASTJETINC) $(FASTJETLIB) -lvectorDict -lEnergyCorrelator -lQjets -lSoftDrop -L./lib anaSubstructure.cpp
     
 %.o: %.C %.h
 	gcc -fPIC -O3 -c $(FASTJETINC) $< -o $@ 

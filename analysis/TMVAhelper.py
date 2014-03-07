@@ -23,7 +23,7 @@ class TMVAhelper:
 
         ## classifier
         ## inputs, list of variables, list of ntuples
-        fout = ROOT.TFile("tmva_"+self._named+".root","RECREATE")        
+        fout = ROOT.TFile(self._named+".root","RECREATE")        
         self._factory = ROOT.TMVA.Factory("TMVAClassification_"+self._named, fout,
                                     ":".join(["!V",
                                               "!Silent",

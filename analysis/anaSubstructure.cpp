@@ -23,7 +23,7 @@
 #include "fastjet/contrib/Njettiness.hh"
 #include "fastjet/contrib/NjettinessPlugin.hh"
 #include "fastjet/contrib/EnergyCorrelator.hh"
-#include "fastjet/contrib/ModifiedMassDropTagger.hh"
+//#include "fastjet/contrib/ModifiedMassDropTagger.hh"
 #include "fastjet/contrib/SoftDrop.hh"
 
 #include "LHEF.h"
@@ -69,14 +69,19 @@ std::vector<float> jtau1_b1;
 std::vector<float> jtau2_b1;
 std::vector<float> jtau1_b2;
 std::vector<float> jtau2_b2;
+std::vector<float> jtau21_b2;
+std::vector<float> jtau21_b1;
 std::vector<float> jc1_b0;
 std::vector<float> jc1_b1;
 std::vector<float> jc1_b2;
+std::vector<float> jc2_b1;
+std::vector<float> jc2_b2;
 std::vector<float> j_qjetVol;
 std::vector<float> j_mass_trim;
 std::vector<float> j_mass_mmdt;
 std::vector<float> j_mass_prun;
 std::vector<float> j_mass_sdb2;
+std::vector<float> j_multiplicity;
 
 void analyzeEvent(std::vector < fastjet::PseudoJet > particles);
 
@@ -95,13 +100,13 @@ int main (int argc, char **argv) {
     int max = atoi(argv[4]);      // events to run over
     
     char inName[192];
-    sprintf( inName, "data/pythia81-tune4c-lhc8-%s-pt0%i-0%i.lhe", type.c_str(), bin, bin+100 );
+    sprintf( inName, "data/%s-pt0%i-0%i.lhe", type.c_str(), bin, bin+100 );
     std::cout << "fname = " << inName << std::endl;
     std::ifstream ifsbkg (inName) ;
     LHEF::Reader reader(ifsbkg) ;
 
     char outName[192];
-    sprintf( outName, "data/boost2013-pythia81-tune4c-lhc8-%s-pt0%i-0%i_validate.root", type.c_str(), bin, bin+100 );    
+    sprintf( outName, "data/boost2013-%s-pt0%i-0%i.root", type.c_str(), bin, bin+100 );
     TFile *f = TFile::Open(outName,"RECREATE");
     TTree *t = new TTree("t","Tree with vectors");
     t->Branch("njets"      , &njets      );
@@ -112,15 +117,19 @@ int main (int argc, char **argv) {
     t->Branch("jtau2_b1"   , &jtau2_b1   );
     t->Branch("jtau1_b2"   , &jtau1_b2   );
     t->Branch("jtau2_b2"   , &jtau2_b2   );
+    t->Branch("jtau21_b1"   , &jtau21_b1   );
+    t->Branch("jtau21_b2"   , &jtau21_b2   );
     t->Branch("jc1_b0"      , &jc1_b0      );
     t->Branch("jc1_b1"      , &jc1_b1      );
     t->Branch("jc1_b2"      , &jc1_b2      );
+    t->Branch("jc2_b1"      , &jc2_b1      );
+    t->Branch("jc2_b2"      , &jc2_b2      );
     t->Branch("j_qjetVol"   , &j_qjetVol      );
     t->Branch("j_mass_trim"      , &j_mass_trim      );
     t->Branch("j_mass_mmdt"      , &j_mass_mmdt      );
     t->Branch("j_mass_prun"      , &j_mass_prun      );
     t->Branch("j_mass_sdb2"      , &j_mass_sdb2      );
-
+    t->Branch("j_multiplicity"   , &j_multiplicity      );
             
     evtCtr = 0;
     std::vector < fastjet::PseudoJet > particles;
@@ -128,7 +137,7 @@ int main (int argc, char **argv) {
     // loop over events
     while ( reader.readEvent () ) {
         ++evtCtr;
-        if (evtCtr % 100 == 0) std::cout << "event " << evtCtr << "\n";
+        if (evtCtr % 1000 == 0) std::cout << "event " << evtCtr << "\n";
         if (evtCtr < min) continue;
         if (evtCtr > max) break;
         
@@ -141,15 +150,20 @@ int main (int argc, char **argv) {
         jtau2_b1.clear();
         jtau1_b2.clear();
         jtau2_b2.clear();
+        jtau21_b1.clear();
+        jtau21_b2.clear();
         jc1_b0.clear();
         jc1_b1.clear();
         jc1_b2.clear();
+        jc2_b1.clear();
+        jc2_b2.clear();
         j_qjetVol.clear();
         j_mass_trim.clear();
         j_mass_mmdt.clear();
         j_mass_prun.clear();
         j_mass_sdb2.clear();
-                        
+        j_multiplicity.clear();
+        
         for (unsigned int i = 0 ; i < reader.hepeup.IDUP.size(); ++i){
 
             if (reader.hepeup.ISTUP.at(i) == 1){
@@ -196,8 +210,8 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
     fastjet::Filter trimmer1( fastjet::Filter(fastjet::JetDefinition(fastjet::kt_algorithm, 0.2), fastjet::SelectorPtFractionMin(0.03)) );
     
     // use just a symmetry cut for the tagger, with no mass-drop requirement
-    double z_cut = 0.10;
-    ModifiedMassDropTagger tagger(z_cut);
+    //double z_cut = 0.10;
+    //ModifiedMassDropTagger tagger(z_cut);
     
     double beta_sd = 1.0;
     double zcut_sd = 0.1;
@@ -217,10 +231,12 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
     fastjet::contrib::Nsubjettiness nSub2KT_b2(2, fastjet::contrib::Njettiness::onepass_kt_axes, 2, R0, Rcut);
     
     // ECF
-    fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b0(1,0,fastjet::contrib::EnergyCorrelator::pt_R);
-    fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b1(1,1,fastjet::contrib::EnergyCorrelator::pt_R);
-    fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b2(1,2,fastjet::contrib::EnergyCorrelator::pt_R);
-                    
+    fastjet::contrib::EnergyCorrelatorDoubleRatio C1_b0(1,0,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelatorDoubleRatio C1_b1(1,1,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelatorDoubleRatio C1_b2(1,2,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b1(2,1,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b2(2,2,fastjet::contrib::EnergyCorrelator::pt_R);
+    
     // ++++++++++++++++++++++++++++++++++++++++++++++++++++
     // FILL IN THE TREE
     njets = out_jets.size();
@@ -235,12 +251,16 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
         jtau2_b1.push_back( nSub2KT_b1(out_jets.at(i)) );        
         jtau1_b2.push_back( nSub1KT_b2(out_jets.at(i)) );        
         jtau2_b2.push_back( nSub2KT_b2(out_jets.at(i)) );  
-                
+        jtau21_b1.push_back( nSub2KT_b1(out_jets.at(i)) / nSub1KT_b1(out_jets.at(i)) );
+        jtau21_b2.push_back( nSub2KT_b2(out_jets.at(i)) / nSub1KT_b2(out_jets.at(i)) );
+        
         // energy correlator        
-        jc1_b0.push_back( C2_b0(out_jets.at(i)) );            
-        jc1_b1.push_back( C2_b1(out_jets.at(i)) );            
-        jc1_b2.push_back( C2_b2(out_jets.at(i)) );                    
-                
+        jc1_b0.push_back( C1_b0(out_jets.at(i)) );
+        jc1_b1.push_back( C1_b1(out_jets.at(i)) );
+        jc1_b2.push_back( C1_b2(out_jets.at(i)) );
+        jc2_b1.push_back( C2_b1(out_jets.at(i)) );
+        jc2_b2.push_back( C2_b2(out_jets.at(i)) );
+        
         // Qjets computation
         int QJetsPreclustering = 999;
         std::vector<fastjet::PseudoJet> constits;        
@@ -274,6 +294,8 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
         j_mass_prun.push_back( pruner1( out_jets.at(i) ).m() );    
         j_mass_mmdt.push_back( soft_drop_mmdt( out_jets.at(i) ).m() );
         j_mass_sdb2.push_back( soft_drop_sdb2( out_jets.at(i) ).m() );
+        
+        j_multiplicity.push_back( (float) out_jets.at(i).constituents().size() );
 
     }
     // ++++++++++++++++++++++++++++++++++++++++++++++++++++
