@@ -381,7 +381,7 @@ if __name__ == '__main__':
         for i in range(len(obs2Corr)):
             for j in range(i+1,len(obs2Corr)):
                 
-                vars_tmp = [obs2Corr[i]+"[0]",obs2Corr[j]]+"[0]";
+                vars_tmp = [obs2Corr[i]+"[0]",obs2Corr[j]+"[0]"];
                 tmvaname = "tmva_"+options.tmvaname+"_"+obs2Corr[i]+"_"+obs2Corr[j]+"_"+cone+"_pt%04i" % (binp1);
                 tmva_tmp = TMVAhelper("tmva_"+options.tmvaname+"_"+obs2Corr[i]+"_"+obs2Corr[j]+"_"+cone,vars_tmp,trainingFiles);
                 bdtClasses.append(tmva_tmp);
