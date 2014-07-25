@@ -81,9 +81,10 @@ std::vector<float> j_mass_trim;
 std::vector<float> j_mass_mmdt;
 std::vector<float> j_mass_prun;
 std::vector<float> j_mass_sdb2;
+std::vector<float> j_mass_sdm1;
 std::vector<float> j_multiplicity;
 
-void analyzeEvent(std::vector < fastjet::PseudoJet > particles);
+void analyzeEvent(std::vector < fastjet::PseudoJet > particles, float rVal);
 
 float FindRMS( std::vector< float > qjetmasses );
 float FindMean( std::vector< float > qjetmasses );
@@ -98,15 +99,18 @@ int main (int argc, char **argv) {
     int binp1 = bin+100;          // pt bin
     int min = atoi(argv[3]);      // events to run over
     int max = atoi(argv[4]);      // events to run over
+    std::string tag = argv[5];
+    float rVal = atof(argv[6]);
     
     char inName[192];
-    sprintf( inName, "data/%s-pt0%i-0%i.lhe", type.c_str(), bin, bin+100 );
+    sprintf( inName, "data/%s-pt%04i-%04i.lhe", type.c_str(), bin, bin+100 );
     std::cout << "fname = " << inName << std::endl;
     std::ifstream ifsbkg (inName) ;
     LHEF::Reader reader(ifsbkg) ;
 
     char outName[192];
-    sprintf( outName, "data/boost2013-%s-pt0%i-0%i.root", type.c_str(), bin, bin+100 );
+    int rInt = (int) (rVal*10.);
+    sprintf( outName, "data/boost2013-%s-pt%04i-%04i%s_ak%02i.root", type.c_str(), bin, bin+100, tag.c_str(), rInt );
     TFile *f = TFile::Open(outName,"RECREATE");
     TTree *t = new TTree("t","Tree with vectors");
     t->Branch("njets"      , &njets      );
@@ -129,6 +133,7 @@ int main (int argc, char **argv) {
     t->Branch("j_mass_mmdt"      , &j_mass_mmdt      );
     t->Branch("j_mass_prun"      , &j_mass_prun      );
     t->Branch("j_mass_sdb2"      , &j_mass_sdb2      );
+    t->Branch("j_mass_sdm1"      , &j_mass_sdm1      );
     t->Branch("j_multiplicity"   , &j_multiplicity      );
             
     evtCtr = 0;
@@ -162,6 +167,7 @@ int main (int argc, char **argv) {
         j_mass_mmdt.clear();
         j_mass_prun.clear();
         j_mass_sdb2.clear();
+        j_mass_sdm1.clear();
         j_multiplicity.clear();
         
         for (unsigned int i = 0 ; i < reader.hepeup.IDUP.size(); ++i){
@@ -174,7 +180,7 @@ int main (int argc, char **argv) {
                 particles.push_back( fastjet::PseudoJet( px, py, pz, e ) );
             }   
         }
-        analyzeEvent( particles );
+        analyzeEvent( particles, rVal );
         t->Fill();
         
     }
@@ -189,10 +195,10 @@ int main (int argc, char **argv) {
     return 0 ;
 }
 
-void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
+void analyzeEvent(std::vector < fastjet::PseudoJet > particles, float rVal){
     
         // recluster on the fly....
-    double rParam = 0.8;
+    double rParam = rVal;
     fastjet::JetDefinition jetDef(fastjet::antikt_algorithm, rParam);    
     
     int activeAreaRepeats = 1;
@@ -218,6 +224,7 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
     double mu_sd   = 1.0;
     contrib::SoftDropTagger soft_drop_mmdt(0.0, zcut_sd, mu_sd);
     contrib::SoftDropTagger soft_drop_sdb2(2.0, zcut_sd, mu_sd);
+    contrib::SoftDropTagger soft_drop_sdm1(-1.0, zcut_sd, mu_sd);
     
     // n-subjettiness    
     double beta = 1; // power for angular dependence, e.g. beta = 1 --> linear k-means, beta = 2 --> quadratic/classic k-means
@@ -294,6 +301,7 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles){
         j_mass_prun.push_back( pruner1( out_jets.at(i) ).m() );    
         j_mass_mmdt.push_back( soft_drop_mmdt( out_jets.at(i) ).m() );
         j_mass_sdb2.push_back( soft_drop_sdb2( out_jets.at(i) ).m() );
+        j_mass_sdm1.push_back( soft_drop_sdm1( out_jets.at(i) ).m() );
         
         j_multiplicity.push_back( (float) out_jets.at(i).constituents().size() );
 

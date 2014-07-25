@@ -29,7 +29,7 @@ class TMVAhelper:
                                               "!Silent",
                                               "Color",
                                               "DrawProgressBar",
-                                              "Transformations=I;D;P;G,D",
+                                              "Transformations=I,N",
                                               "AnalysisType=Classification"]
                                              ));        
         
@@ -62,19 +62,28 @@ class TMVAhelper:
                                                      "!V"
                                                      ]));
 
-        method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT, "BDT",
-                                    ":".join([
-                                              "!H",
-                                              "!V",
-                                              "NTrees=850",
-                                              "nEventsMin=150",
-                                              "MaxDepth=3",
-                                              "BoostType=AdaBoost",
-                                              "AdaBoostBeta=0.5",
-                                              "SeparationType=GiniIndex",
-                                              "nCuts=20",
-                                              "PruneMethod=NoPruning",
-                                              ]))
+        #method = self._factory.BookMethod(ROOT.TMVA.Types.kCuts, "CutsGA","!H:!V:FitMethod=GA:EffSel:Steps=40:PopSize=400:SC_steps=10:SC_rate=5:SC_factor=0.95");
+        #method = self._factory.BookMethod(ROOT.TMVA.Types.kCuts, "CutsMC","!H:!V:FitMethod=MC:EffSel:");
+
+        # method = self._factory.BookMethod(ROOT.TMVA.Types.kCuts, "CutsSA","!H:!V:FitMethod=SA:EffSel:KernelTemp=IncAdaptive:Eps=1e-10:UseDefaultScale");
+        # method = self._factory.BookMethod(ROOT.TMVA.Types.kPDEFoam, "PDEFoam","!H:!V::VarTransform=I,N:CreateMVAPdfs:IgnoreNegWeightsInTraining:SigBgSeparate=F:TailCut=0.001"
+        #                                                          ":VolFrac=0.0666:nActiveCells=500:nSampl=2000:nBin=5:Nmin=100:Kernel=None:Compress=T");
+        # method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT, "BDT",
+        #                             ":".join([
+        #                                       "!H",
+        #                                       "!V",
+        #                                       "NTrees=500",
+        #                                       "MinNodeSize=5%",
+        #                                       "MaxDepth=5",
+        #                                       "BoostType=AdaBoost",
+        #                                       "AdaBoostBeta=0.5",
+        #                                       "SeparationType=GiniIndex",
+        #                                       "nCuts=200",
+        #                                       "PruneMethod=CostComplexity",
+        #                                       "PruneStrength=5"
+        #                                       ]));
+        ##method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=100:BoostType=Grad:Shrinkage=0.10:UseBaggedGrad=F:nCuts=2000:NNodesMax=10000:MaxDepth=3:SeparationType=GiniIndex");
+        method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=400:BoostType=Grad:Shrinkage=0.1:UseBaggedGrad=F:nCuts=2000:NNodesMax=10000:MaxDepth=5:UseYesNoLeaf=F:nEventsMin=200");
 
         self._factory.TrainAllMethods()
         self._factory.TestAllMethods()
@@ -82,7 +91,7 @@ class TMVAhelper:
         
         
     # -------------------------------------    
-    def read(self):
+    def read(self,method="BDT"):
     
         print "reading"
         for i in range(self._nInputVars): self._varRefs.append( array('f',[0]) );
@@ -90,15 +99,15 @@ class TMVAhelper:
         for i in range(self._nInputVars):
             self._reader.AddVariable(self._inputVars[i],self._varRefs[i]);        
 
-        self._reader.BookMVA("BDT","weights/TMVAClassification_"+self._named+"_BDT.weights.xml")        
+        self._reader.BookMVA(method,"weights/TMVAClassification_"+self._named+"_"+method+".weights.xml")        
         #self._reader.BookMVA("BDT","weights/TMVAClassification_BDT.weights.xml")        
         
     # -------------------------------------            
-    def evaluate(self,val):
+    def evaluate(self,val,method="BDT"):
             
         for i in range(self._nInputVars):
             self._varRefs[i][0] = val[i];  
         
-        bdtOutput = self._reader.EvaluateMVA("BDT")
+        bdtOutput = self._reader.EvaluateMVA(method)
         return bdtOutput;      
         
