@@ -76,6 +76,8 @@ std::vector<float> jc1_b1;
 std::vector<float> jc1_b2;
 std::vector<float> jc2_b1;
 std::vector<float> jc2_b2;
+std::vector<float> jd2_b1;
+std::vector<float> jd2_b2;
 std::vector<float> j_qjetVol;
 std::vector<float> j_mass_trim;
 std::vector<float> j_mass_mmdt;
@@ -103,14 +105,16 @@ int main (int argc, char **argv) {
     float rVal = atof(argv[6]);
     
     char inName[192];
-    sprintf( inName, "data/%s-pt%04i-%04i.lhe", type.c_str(), bin, bin+100 );
+    //sprintf( inName, "dataProcessedFinal/LHEFiles/%s-pt%04i-%04i-100k.lhe", type.c_str(), bin, bin+100 );
+    // sprintf( inName, "dataProcessedFinal/LHEFiles/%s.lhe", type.c_str() );
+    sprintf( inName, "dataLHE/%s-pt%04i-%04i-100k.lhe", type.c_str(), bin, bin+100 );
     std::cout << "fname = " << inName << std::endl;
     std::ifstream ifsbkg (inName) ;
     LHEF::Reader reader(ifsbkg) ;
 
     char outName[192];
     int rInt = (int) (rVal*10.);
-    sprintf( outName, "data/boost2013-%s-pt%04i-%04i%s_ak%02i.root", type.c_str(), bin, bin+100, tag.c_str(), rInt );
+    sprintf( outName, "dataProcessedFinalSCOT/boost2013-%s-pt%04i-%04i%s_ak%02i.root", type.c_str(), bin, bin+100, tag.c_str(), rInt );
     TFile *f = TFile::Open(outName,"RECREATE");
     TTree *t = new TTree("t","Tree with vectors");
     t->Branch("njets"      , &njets      );
@@ -128,6 +132,8 @@ int main (int argc, char **argv) {
     t->Branch("jc1_b2"      , &jc1_b2      );
     t->Branch("jc2_b1"      , &jc2_b1      );
     t->Branch("jc2_b2"      , &jc2_b2      );
+    t->Branch("jd2_b1"      , &jd2_b1      );
+    t->Branch("jd2_b2"      , &jd2_b2      );
     t->Branch("j_qjetVol"   , &j_qjetVol      );
     t->Branch("j_mass_trim"      , &j_mass_trim      );
     t->Branch("j_mass_mmdt"      , &j_mass_mmdt      );
@@ -162,6 +168,8 @@ int main (int argc, char **argv) {
         jc1_b2.clear();
         jc2_b1.clear();
         jc2_b2.clear();
+        jd2_b1.clear();
+        jd2_b2.clear();
         j_qjetVol.clear();
         j_mass_trim.clear();
         j_mass_mmdt.clear();
@@ -243,6 +251,15 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles, float rVal){
     fastjet::contrib::EnergyCorrelatorDoubleRatio C1_b2(1,2,fastjet::contrib::EnergyCorrelator::pt_R);
     fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b1(2,1,fastjet::contrib::EnergyCorrelator::pt_R);
     fastjet::contrib::EnergyCorrelatorDoubleRatio C2_b2(2,2,fastjet::contrib::EnergyCorrelator::pt_R);
+
+    fastjet::contrib::EnergyCorrelator ECF_E1_b1 (1,1.0,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelator ECF_E1_b2 (1,2.0,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelator ECF_E2_b1 (2,1.0,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelator ECF_E2_b2 (2,2.0,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelator ECF_E3_b1 (3,1.0,fastjet::contrib::EnergyCorrelator::pt_R);
+    fastjet::contrib::EnergyCorrelator ECF_E3_b2 (3,2.0,fastjet::contrib::EnergyCorrelator::pt_R);
+
+    // fastjet::contrib::EnergyCorrelatorD2 d2(1.0,fastjet::contrib::EnergyCorrelator::pt_R);
     
     // ++++++++++++++++++++++++++++++++++++++++++++++++++++
     // FILL IN THE TREE
@@ -267,6 +284,17 @@ void analyzeEvent(std::vector < fastjet::PseudoJet > particles, float rVal){
         jc1_b2.push_back( C1_b2(out_jets.at(i)) );
         jc2_b1.push_back( C2_b1(out_jets.at(i)) );
         jc2_b2.push_back( C2_b2(out_jets.at(i)) );
+
+        double cur_e1_b1 = ECF_E1_b1(out_jets.at(i));
+        double cur_e1_b2 = ECF_E1_b2(out_jets.at(i));
+        double cur_e2_b1 = ECF_E2_b1(out_jets.at(i));
+        double cur_e2_b2 = ECF_E2_b2(out_jets.at(i));
+        double cur_e3_b1 = ECF_E3_b1(out_jets.at(i));
+        double cur_e3_b2 = ECF_E3_b2(out_jets.at(i));
+        jd2_b1.push_back( cur_e3_b1 * pow(cur_e1_b1,3) / pow(cur_e2_b1,3) );
+        jd2_b2.push_back( cur_e3_b2 * pow(cur_e1_b1,3) / pow(cur_e2_b2,3) );
+
+        // std::cout << "event: " << cur_e3_b1 << ", " << cur_e3_b2 << ", " << cur_e2_b1 << ", " << cur_e2_b2 << ", " << cur_e3_b1 * pow(cur_e1_b1,3) / pow(cur_e2_b1,3) << ", " << cur_e3_b2 * pow(cur_e1_b1,3) / pow(cur_e2_b2,3) << std::endl;
         
         // Qjets computation
         int QJetsPreclustering = 999;

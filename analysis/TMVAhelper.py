@@ -21,6 +21,8 @@ class TMVAhelper:
         self._files = files;
         self._nInputVars = len(self._inputVars);
 
+        #print "NUMBER OF FILES = ",len(self._files)
+
         ## classifier
         ## inputs, list of variables, list of ntuples
         fout = ROOT.TFile(self._named+".root","RECREATE")        
@@ -29,21 +31,23 @@ class TMVAhelper:
                                               "!Silent",
                                               "Color",
                                               "DrawProgressBar",
-                                              "Transformations=I,N",
+                                              "Transformations=I",
                                               "AnalysisType=Classification"]
                                              ));        
         
         self._reader = ROOT.TMVA.Reader()
         self._varRefs = [];
+        self._ptRef = array('f',[0]);
 
     # -------------------------------------    
-    def train(self):
+    def train(self,ptlo,pthi):
         
         print "training..."
         
         # define inputs
         for i in range(self._nInputVars):
             self._factory.AddVariable(self._inputVars[i],"F");
+        self._factory.AddSpectator("jpt[0]","F");
 
         fs = ROOT.TFile(self._files[0]);
         fb = ROOT.TFile(self._files[1]);
@@ -52,6 +56,7 @@ class TMVAhelper:
         self._factory.AddSignalTree( ts );
         self._factory.AddBackgroundTree( tb );
 
+        cutstring = "(jpt[0] > "+str(ptlo)+") && (jpt[0] < "+str(pthi)+")";
         cuts = ROOT.TCut("");
         self._factory.PrepareTrainingAndTestTree(cuts,   # signal events
                                            ":".join([
@@ -82,8 +87,13 @@ class TMVAhelper:
         #                                       "PruneMethod=CostComplexity",
         #                                       "PruneStrength=5"
         #                                       ]));
-        ##method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=100:BoostType=Grad:Shrinkage=0.10:UseBaggedGrad=F:nCuts=2000:NNodesMax=10000:MaxDepth=3:SeparationType=GiniIndex");
+
+        ###method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=500:BoostType=Grad:Shrinkage=0.10:UseBaggedGrad=F:nCuts=25000:MaxDepth=3:SeparationType=GiniIndex");
+        ###if self._inputVars <= 2: method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=500:BoostType=Grad:Shrinkage=0.10:UseBaggedGrad=F:nCuts=25000:MaxDepth=3:SeparationType=GiniIndex");
+        ###else:                    method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=1000:BoostType=Grad:Shrinkage=0.10:UseBaggedGrad=F:nCuts=25000:MaxDepth=5:SeparationType=GiniIndex");
         method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=400:BoostType=Grad:Shrinkage=0.1:UseBaggedGrad=F:nCuts=2000:NNodesMax=10000:MaxDepth=5:UseYesNoLeaf=F:nEventsMin=200");
+        #method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=1000:BoostType=Grad:Shrinkage=0.1:UseBaggedGrad=F:nCuts=10000:MaxDepth=3:UseYesNoLeaf=F:nEventsMin=200")
+        ##method = self._factory.BookMethod(ROOT.TMVA.Types.kBDT,"BDTG","!H:!V:NTrees=1000:BoostType=Grad:Shrinkage=0.10:UseBaggedGrad=F:nCuts=25000:MaxDepth=5:SeparationType=GiniIndex");
 
         self._factory.TrainAllMethods()
         self._factory.TestAllMethods()
@@ -98,6 +108,7 @@ class TMVAhelper:
         
         for i in range(self._nInputVars):
             self._reader.AddVariable(self._inputVars[i],self._varRefs[i]);        
+        self._reader.AddSpectator("jpt[0]",self._ptRef);
 
         self._reader.BookMVA(method,"weights/TMVAClassification_"+self._named+"_"+method+".weights.xml")        
         #self._reader.BookMVA("BDT","weights/TMVAClassification_BDT.weights.xml")        
